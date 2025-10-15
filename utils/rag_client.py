@@ -34,6 +34,10 @@ class RAGClient:
             if not request_id:
                 return None
             
+            # Логируем RAG запрос в базу данных
+            from database.db import db
+            await db.log_rag_request(user_id, request_id, text[:200] + "..." if len(text) > 200 else text)
+            
             # Ожидание ответа
             return await self._wait_for_response(request_id)
             

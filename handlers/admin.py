@@ -272,6 +272,7 @@ async def cmd_help(message: Message):
 /del_user &lt;id или @username&gt; - Удалить пользователя
 /list_users [фильтр] [лимит] [смещение] - Список пользователей
 /pending_users - Пользователи в ожидании активации
+/stat [период] - Статистика бота
 
 **Фильтры для /list_users:**
 - allowed - только разрешенные пользователи
@@ -279,6 +280,11 @@ async def cmd_help(message: Message):
 - admins - только администраторы
 - users - только обычные пользователи
 - name:&lt;текст&gt; - поиск по имени пользователя
+
+**Периоды для /stat:**
+- day - статистика за день
+- month - статистика за месяц  
+- year - статистика за год
 
 **Примечание:** Пользователи, добавленные по @username, получат доступ при первом обращении к боту.
 
@@ -355,7 +361,74 @@ async def cmd_pending_users(message: Message):
             response += f"   Статус: Ожидает первого обращения к боту\n\n"
         
         await message.reply(response)
-        
+
     except Exception as e:
         logger.error(f"Error getting pending users: {e}")
         await message.reply("❌ Произошла ошибка при получении списка пользователей в ожидании.")
+
+@router.message(Command("stat"))
+async def cmd_stat(message: Message):
+    """Команда получения статистики (только для админов)"""
+    # Проверяем права администратора
+    if not await db.is_admin(message.from_user.id):
+        await message.reply("❌ У вас нет прав для выполнения этой команды.")
+        return
+
+    command, args = parse_command_args(message.text)
+    
+    # Определяем период (по умолчанию - день)
+    period = args[0] if args else "day"
+    
+    if period not in ["day", "month", "year"]:
+        await message.reply("❌ Неверный период. Используйте: day, month или year")
+        return
+
+    try:
+        stats = await db.get_statistics(period)
+        
+        # Форматируем период для отображения
+        period_names = {
+            "day": "день",
+            "month": "месяц", 
+            "year": "год"
+        }
+        period_display = period_names.get(period, period)
+        
+        response = f"""📊 **Статистика за {period_display}**
+
+👥 **Пользователи:**
+• Всего пользователей: {stats['total_users']}
+• Активных за период: {stats['active_users']}
+• Новых за период: {stats['new_users']}
+
+💬 **Сообщения:**
+• Всего сообщений: {stats['total_messages']}
+• Команд: {stats['commands']}
+• Текстовых сообщений: {stats['text_messages']}
+
+🤖 **RAG API:**
+• Запросов к AI: {stats['rag_requests']}
+
+👑 **Топ пользователей по активности:**
+"""
+        
+        if stats['top_users']:
+            for i, user in enumerate(stats['top_users'], 1):
+                username = user.get('username', 'N/A')
+                message_count = user.get('message_count', 0)
+                response += f"{i}. @{username}: {message_count} сообщений\n"
+        else:
+            response += "Нет данных\n"
+        
+        response += "\n📈 **Статистика по ролям:**\n"
+        for role_stat in stats['role_stats']:
+            role = role_stat.get('role', 'N/A')
+            count = role_stat.get('count', 0)
+            role_display = "Администраторы" if role == "admin" else "Пользователи"
+            response += f"• {role_display}: {count}\n"
+        
+        await message.reply(response)
+
+    except Exception as e:
+        logger.error(f"Error getting statistics: {e}")
+        await message.reply("❌ Произошла ошибка при получении статистики.")

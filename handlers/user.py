@@ -35,6 +35,10 @@ async def cmd_set_car(message: Message):
     
     try:
         success = await db.set_car(message.from_user.id, car_description)
+        
+        # Логируем команду
+        await db.log_message(message.from_user.id, "command", f"set_car: {car_description[:100]}...")
+        
         if success:
             await message.reply(f"✅ Информация об автомобиле сохранена:\n🚗 {car_description}")
         else:
@@ -52,6 +56,9 @@ async def cmd_my_car(message: Message):
         return
     
     try:
+        # Логируем команду
+        await db.log_message(message.from_user.id, "command", "my_car")
+        
         car_info = await db.get_car(message.from_user.id)
         if car_info:
             await message.reply(f"🚗 **Ваш автомобиль:**\n{car_info}", parse_mode="Markdown")
@@ -70,7 +77,11 @@ async def cmd_to(message: Message):
         return
     
     # В первой версии просто возвращаем контактный телефон
-    contact_info = """🔧 **Запись на ТО**
+    try:
+        # Логируем команду
+        await db.log_message(message.from_user.id, "command", "to")
+        
+        contact_info = """🔧 **Запись на ТО**
 
 Для записи на техническое обслуживание обращайтесь:
 
@@ -79,8 +90,11 @@ async def cmd_to(message: Message):
 📍 **Адрес:** [Адрес сервисного центра]
 
 Или оставьте заявку через бота, и мы свяжемся с вами."""
-    
-    await message.reply(contact_info, parse_mode="Markdown")
+        
+        await message.reply(contact_info, parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Error in to command: {e}")
+        await message.reply("❌ Произошла ошибка при получении контакта.")
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
@@ -198,6 +212,9 @@ async def handle_text_message(message: Message):
     if not question:
         await message.reply("❌ Пустое сообщение. Задайте вопрос о вашем автомобиле.")
         return
+    
+    # Логируем текстовое сообщение
+    await db.log_message(message.from_user.id, "text", question[:100] + "..." if len(question) > 100 else question)
     
     # Отправляем сообщение о том, что обрабатываем запрос
     processing_msg = await message.reply("🤔 Обрабатываю ваш вопрос...")

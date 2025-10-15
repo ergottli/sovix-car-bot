@@ -83,6 +83,112 @@ class Database:
             """)
             return [dict(row) for row in rows]
     
+    async def log_rag_request(self, user_id: int, request_id: str, text: str) -> None:
+        """Логирование запроса к RAG API"""
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO rag_requests (user_id, request_id, text)
+                VALUES ($1, $2, $3)
+            """, user_id, request_id, text)
+    
+    async def log_message(self, user_id: int, message_type: str, content: str) -> None:
+        """Логирование сообщения"""
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO messages (user_id, message_type, content)
+                VALUES ($1, $2, $3)
+            """, user_id, message_type, content)
+    
+    async def get_statistics(self, period: str) -> Dict[str, Any]:
+        """Получение статистики за период"""
+        async with self.pool.acquire() as conn:
+            # Определяем временной интервал
+            if period == "day":
+                time_filter = "created_at >= NOW() - INTERVAL '1 day'"
+            elif period == "month":
+                time_filter = "created_at >= NOW() - INTERVAL '1 month'"
+            elif period == "year":
+                time_filter = "created_at >= NOW() - INTERVAL '1 year'"
+            else:
+                time_filter = "created_at >= NOW() - INTERVAL '1 day'"
+            
+            # Общее количество пользователей
+            total_users = await conn.fetchval("SELECT COUNT(*) FROM users")
+            
+            # Активные пользователи за период
+            active_users = await conn.fetchval(f"""
+                SELECT COUNT(DISTINCT user_id) 
+                FROM messages 
+                WHERE {time_filter}
+            """)
+            
+            # Новые пользователи за период
+            new_users = await conn.fetchval(f"""
+                SELECT COUNT(*) 
+                FROM users 
+                WHERE {time_filter}
+            """)
+            
+            # Общее количество сообщений за период
+            total_messages = await conn.fetchval(f"""
+                SELECT COUNT(*) 
+                FROM messages 
+                WHERE {time_filter}
+            """)
+            
+            # Количество команд за период
+            commands = await conn.fetchval(f"""
+                SELECT COUNT(*) 
+                FROM messages 
+                WHERE message_type = 'command' AND {time_filter}
+            """)
+            
+            # Количество текстовых сообщений за период
+            text_messages = await conn.fetchval(f"""
+                SELECT COUNT(*) 
+                FROM messages 
+                WHERE message_type = 'text' AND {time_filter}
+            """)
+            
+            # Количество запросов к RAG API за период
+            rag_requests = await conn.fetchval(f"""
+                SELECT COUNT(*) 
+                FROM rag_requests 
+                WHERE {time_filter}
+            """)
+            
+            # Топ пользователей по активности
+            top_users = await conn.fetch(f"""
+                SELECT u.username, u.user_id, COUNT(m.id) as message_count
+                FROM users u
+                JOIN messages m ON u.user_id = m.user_id
+                WHERE m.{time_filter}
+                GROUP BY u.user_id, u.username
+                ORDER BY message_count DESC
+                LIMIT 5
+            """)
+            
+            # Статистика по ролям
+            role_stats = await conn.fetch(f"""
+                SELECT role, COUNT(*) as count
+                FROM users
+                WHERE {time_filter}
+                GROUP BY role
+            """)
+            
+            return {
+                "period": period,
+                "total_users": total_users,
+                "active_users": active_users,
+                "new_users": new_users,
+                "total_messages": total_messages,
+                "commands": commands,
+                "text_messages": text_messages,
+                "rag_requests": rag_requests,
+                "top_users": [dict(row) for row in top_users],
+                "role_stats": [dict(row) for row in role_stats]
+            }
+    
     async def delete_user(self, user_id: int) -> bool:
         """Удаление пользователя"""
         async with self.pool.acquire() as conn:
