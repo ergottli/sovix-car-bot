@@ -31,10 +31,14 @@ class Database:
             return False
         
         async with self.pool.acquire() as conn:
+            # Обновляем существующего пользователя или создаем нового администратора
             await conn.execute("""
                 INSERT INTO users (user_id, username, role, allowed)
                 VALUES ($1, $2, 'admin', TRUE)
-                ON CONFLICT (user_id) DO NOTHING
+                ON CONFLICT (user_id) DO UPDATE SET 
+                    role = 'admin',
+                    allowed = TRUE,
+                    username = EXCLUDED.username
             """, user_id, username)
             return True
     
@@ -47,6 +51,37 @@ class Database:
                 ON CONFLICT (user_id) DO UPDATE SET allowed = TRUE
             """, user_id, username)
             return True
+    
+    async def add_user_by_username(self, username: str) -> bool:
+        """Добавление пользователя по username (временный user_id = -1)"""
+        async with self.pool.acquire() as conn:
+            # Используем временный user_id = -1 для пользователей, добавленных по username
+            await conn.execute("""
+                INSERT INTO users (user_id, username, role, allowed)
+                VALUES (-1, $1, 'user', TRUE)
+                ON CONFLICT (user_id) DO NOTHING
+            """, username)
+            return True
+    
+    async def update_user_id_by_username(self, username: str, new_user_id: int) -> bool:
+        """Обновление user_id для пользователя, добавленного по username"""
+        async with self.pool.acquire() as conn:
+            result = await conn.execute("""
+                UPDATE users 
+                SET user_id = $1 
+                WHERE username = $2 AND user_id = -1
+            """, new_user_id, username)
+            return result == "UPDATE 1"
+    
+    async def get_pending_users(self) -> List[Dict[str, Any]]:
+        """Получение пользователей с временным user_id"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT user_id, username, role, allowed, car, created_at
+                FROM users WHERE user_id = -1
+                ORDER BY created_at ASC
+            """)
+            return [dict(row) for row in rows]
     
     async def delete_user(self, user_id: int) -> bool:
         """Удаление пользователя"""
