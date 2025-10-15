@@ -1,10 +1,10 @@
 import aiohttp
 import asyncio
 import os
-import logging
 from typing import Optional, Dict, Any
+from utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class RAGClient:
     def __init__(self):
@@ -28,21 +28,34 @@ class RAGClient:
         Returns:
             Ответ от RAG API или None в случае ошибки
         """
+        logger.info(f"Sending RAG request for user {user_id} (@{username}): {text[:100]}...")
+        
         try:
             # Отправка запроса
             request_id = await self._create_request(text, user_id, username)
             if not request_id:
+                logger.error(f"Failed to create RAG request for user {user_id}")
                 return None
+            
+            logger.debug(f"RAG request created with ID: {request_id}")
             
             # Логируем RAG запрос в базу данных
             from database.db import db
             await db.log_rag_request(user_id, request_id, text[:200] + "..." if len(text) > 200 else text)
             
             # Ожидание ответа
-            return await self._wait_for_response(request_id)
+            logger.debug(f"Waiting for RAG response for request {request_id}")
+            response = await self._wait_for_response(request_id)
+            
+            if response:
+                logger.info(f"RAG response received for user {user_id}, length: {len(response)} chars")
+            else:
+                logger.warning(f"No RAG response received for user {user_id}, request {request_id}")
+            
+            return response
             
         except Exception as e:
-            logger.error(f"Error in RAG request: {e}")
+            logger.error(f"Error in RAG request for user {user_id}: {e}")
             return None
     
     async def _create_request(self, text: str, user_id: int, username: str = None) -> Optional[str]:

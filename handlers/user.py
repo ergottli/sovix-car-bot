@@ -1,19 +1,24 @@
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
-import logging
 
 from database.db import db
 from utils.helpers import parse_command_args, validate_car_description, sanitize_text
+from utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = Router()
 
 @router.message(Command("set_car"))
 async def cmd_set_car(message: Message):
     """Команда сохранения информации об автомобиле"""
+    user_id = message.from_user.id
+    username = message.from_user.username
+    logger.info(f"User {user_id} (@{username}) executed /set_car command")
+    
     # Проверяем права доступа
-    if not await db.is_user_allowed(message.from_user.id):
+    if not await db.is_user_allowed(user_id):
+        logger.warning(f"User {user_id} (@{username}) tried to use /set_car without permission")
         await message.reply("❌ У вас нет доступа к функциям бота. Обратитесь к администратору.")
         return
     
@@ -187,19 +192,24 @@ async def handle_text_message(message: Message):
     """Обработка текстовых сообщений (вопросы к AI)"""
     user_id = message.from_user.id
     username = message.from_user.username
+    question = message.text[:100] + "..." if len(message.text) > 100 else message.text
+    logger.info(f"User {user_id} (@{username}) sent text message: {question}")
     
     # Если пользователя нет в базе, но есть username, проверяем, не добавлен ли он по username
     if username:
         user = await db.get_user(user_id)
         if not user:
+            logger.debug(f"User {user_id} (@{username}) not found in DB, checking if added by username")
             # Пытаемся обновить user_id для пользователя, добавленного по username
             success = await db.update_user_id_by_username(username, user_id)
             if success:
+                logger.info(f"User {user_id} (@{username}) activated from pending users")
                 # Перезагружаем данные пользователя
                 user = await db.get_user(user_id)
     
     # Проверяем права доступа
-    if not await db.is_user_allowed(message.from_user.id):
+    if not await db.is_user_allowed(user_id):
+        logger.warning(f"User {user_id} (@{username}) tried to send text message without permission")
         await message.reply("❌ У вас нет доступа к функциям бота. Обратитесь к администратору.")
         return
     
@@ -242,7 +252,8 @@ async def handle_text_message(message: Message):
         await processing_msg.delete()
         
         if response:
-            await message.reply(f"🤖 **Ответ:**\n\n{response}", parse_mode="Markdown")
+            # Отправляем ответ реплаем (без реакции, так как API может быть недоступен)
+            await message.reply(f"🤖 {response}", parse_mode="Markdown")
         else:
             await message.reply("⚠️ Не удалось получить ответ, попробуйте позже.")
             

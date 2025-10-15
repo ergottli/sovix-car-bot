@@ -4,7 +4,6 @@ Car Assistant Bot - Telegram бот для владельцев автомоби
 """
 
 import asyncio
-import logging
 import os
 import sys
 from pathlib import Path
@@ -15,17 +14,10 @@ from dotenv import load_dotenv
 
 from database.db import db
 from handlers import admin, user
+from utils.logger import setup_logging, get_logger
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/bot.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # Загрузка переменных окружения
 load_dotenv()

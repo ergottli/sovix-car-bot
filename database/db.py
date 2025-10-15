@@ -1,9 +1,9 @@
 import asyncpg
 import os
 from typing import Optional, List, Dict, Any
-import logging
+from utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class Database:
     def __init__(self):

@@ -1,12 +1,12 @@
 from aiogram import Router, F, Bot
 from aiogram.types import Message
 from aiogram.filters import Command
-import logging
 
 from database.db import db
 from utils.helpers import parse_command_args, extract_user_id, format_users_list
+from utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 router = Router()
 
 async def get_user_id_by_username(bot: Bot, username: str) -> int | None:
