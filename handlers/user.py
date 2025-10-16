@@ -253,7 +253,7 @@ async def handle_text_message(message: Message):
         
         if response:
             # Отправляем ответ реплаем (без реакции, так как API может быть недоступен)
-            await message.reply(f"🤖 {response}", parse_mode="Markdown")
+            await message.reply(f"{response}", parse_mode="Markdown")
         else:
             await message.reply("⚠️ Не удалось получить ответ, попробуйте позже.")
             
