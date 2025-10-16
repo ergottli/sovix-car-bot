@@ -56,7 +56,7 @@ async def cmd_bootstrap(message: Message):
 • /list_users - Список пользователей
 • /pending_users - Пользователи в ожидании
 
-Используйте /help для полной справки по командам.""")
+Используйте /help для полной справки по командам.""", parse_mode="Markdown")
         else:
             await message.reply("❌ Неверный секрет для регистрации администратора.")
     except Exception as e:
@@ -334,7 +334,7 @@ async def cmd_help(message: Message):
 
 """
     
-    await message.reply(help_text)
+    await message.reply(help_text, parse_mode="Markdown")
 
 @router.message(Command("pending_users"))
 async def cmd_pending_users(message: Message):
@@ -360,7 +360,7 @@ async def cmd_pending_users(message: Message):
             response += f"   Добавлен: {created_at}\n"
             response += f"   Статус: Ожидает первого обращения к боту\n\n"
         
-        await message.reply(response)
+        await message.reply(response, parse_mode="Markdown")
 
     except Exception as e:
         logger.error(f"Error getting pending users: {e}")
@@ -427,7 +427,7 @@ async def cmd_stat(message: Message):
             role_display = "Администраторы" if role == "admin" else "Пользователи"
             response += f"• {role_display}: {count}\n"
         
-        await message.reply(response)
+        await message.reply(response, parse_mode="Markdown")
 
     except Exception as e:
         logger.error(f"Error getting statistics: {e}")
