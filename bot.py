@@ -38,6 +38,12 @@ async def main():
         # Создание таблиц если их нет
         await create_tables()
         
+        # Инициализация шаблонов
+        await init_templates()
+        
+        # Инициализация администраторов
+        await init_admins()
+        
         # Создание бота и диспетчера
         bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
         dp = Dispatcher()
@@ -74,6 +80,84 @@ async def create_tables():
             logger.warning("SQL schema file not found, tables may not be created")
     except Exception as e:
         logger.error(f"Error creating tables: {e}")
+        raise
+
+async def init_templates():
+    """Инициализация шаблонов текстов в базе данных"""
+    try:
+        # Список шаблонов по умолчанию
+        templates = [
+            ('welcome_text', 'Привет! Я твой помощник по китайским машинам — помогу с эксплуатацией, ТО, ошибками и советами.', 'Приветственное сообщение при старте бота'),
+            ('support_text', 'Поддержка готова помочь с вашим вопросом, пишите https://t.me/PerovV12', 'Текст для кнопки Написать в поддержку'),
+            ('processing_text', '🤔 Обрабатываю ваш вопрос...', 'Сообщение при обработке вопроса пользователя'),
+            ('rag_error_text', '⚠️ Не удалось получить ответ, попробуйте позже.', 'Сообщение об ошибке RAG API'),
+            ('limit_exceeded_text', 'Превышен лимит вопросов', 'Сообщение о превышении лимита'),
+        ]
+        
+        async with db.pool.acquire() as conn:
+            for key, value, description in templates:
+                await conn.execute("""
+                    INSERT INTO text_templates (key, value, description)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+                """, key, value, description)
+                logger.info(f"Template '{key}' initialized")
+        
+        logger.info("All templates initialized successfully")
+        
+    except Exception as e:
+        logger.warning(f"Error initializing templates (may already exist): {e}")
+        # Не падаем при ошибке, так как шаблоны могут уже существовать
+
+async def init_admins():
+    """Инициализация администраторов из переменной окружения"""
+    try:
+        admin_ids_str = os.getenv('ADMIN_USER_IDS', '')
+        if not admin_ids_str:
+            logger.info("No ADMIN_USER_IDS set, skipping admin initialization")
+            return
+        
+        # Парсим список админов
+        admin_list = []
+        for admin_str in admin_ids_str.split(','):
+            admin_str = admin_str.strip()
+            # Формат может быть: "363046871" или "363046871@ergottli
+            parts = admin_str.split('@')
+            if len(parts) > 0:
+                user_id = parts[0].strip()
+                try:
+                    user_id_int = int(user_id)
+                    # Формируем username: если есть @ в строке, берем часть после @, иначе создаем admin_{user_id}
+                    if len(parts) > 1 and parts[1].strip():
+                        username = f"@{parts[1].strip()}"
+                    else:
+                        username = f"admin_{user_id}"
+                    admin_list.append((user_id_int, username))
+                except ValueError:
+                    logger.warning(f"Invalid admin ID: {admin_str}")
+                    continue
+        
+        if not admin_list:
+            logger.info("No valid admins found in ADMIN_USER_IDS")
+            return
+        
+        # Добавляем админов в базу
+        async with db.pool.acquire() as conn:
+            for user_id, username in admin_list:
+                await conn.execute("""
+                    INSERT INTO users (user_id, username, role, allowed)
+                    VALUES ($1, $2, 'admin', TRUE)
+                    ON CONFLICT (user_id) DO UPDATE SET 
+                        role = 'admin',
+                        allowed = TRUE,
+                        username = EXCLUDED.username
+                """, user_id, username)
+                logger.info(f"Admin {user_id} ({username}) initialized")
+        
+        logger.info(f"All {len(admin_list)} admin(s) initialized successfully")
+        
+    except Exception as e:
+        logger.error(f"Error initializing admins: {e}")
         raise
 
 async def shutdown():

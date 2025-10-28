@@ -4,29 +4,19 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
+dist/
+build/
 
 # Environment
 .env
 .env.local
 .env.*.local
+
+# Git
+.git/
+.gitignore
+.gitattributes
 
 # IDE
 .vscode/
@@ -49,7 +39,19 @@ logs/
 Thumbs.db
 
 # Docker
+Dockerfile
+docker-compose.yml
 docker-compose.override.yml
+.dockerignore
+
+# Documentation
+README.md
+ANALYTICS_UPDATE.md
+*.md
+
+# Tests
+test_*.py
+tests/
 
 # SSL certificates
 ssl/
@@ -57,6 +59,7 @@ ssl/
 *.crt
 *.key
 
-# Alembic
+# Alembic cache
 alembic/__pycache__/
 alembic/versions/__pycache__/
+

@@ -1,0 +1,19 @@
+Generic single-database configuration with async support for asyncpg.
+
+This configuration is set up to work with asyncpg and PostgreSQL.
+
+To run migrations:
+
+    alembic upgrade head
+
+To create a new migration:
+
+    alembic revision -m "description"
+
+To rollback:
+
+    alembic downgrade -1
+
+For more information, see the Alembic documentation:
+https://alembic.sqlalchemy.org/
+

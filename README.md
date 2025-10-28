@@ -74,6 +74,11 @@ docker compose logs -f bot
 docker compose down
 ```
 
+**Важно:** При запуске через Docker Compose миграции базы данных **применяются автоматически**! 
+- `entrypoint.sh` ожидает готовности PostgreSQL
+- Автоматически выполняет `alembic upgrade head`
+- Затем запускает бота
+
 ### 4. Локальная разработка
 ```bash
 # Установка зависимостей
@@ -106,24 +111,73 @@ car-assistant-bot/
 ├── database/
 │   ├── db.py             # подключение к PostgreSQL
 │   └── models.sql        # схема таблиц
+├── alembic/              # миграции базы данных
+│   ├── env.py           # настройки окружения для миграций
+│   ├── script.py.mako   # шаблон для новых миграций
+│   ├── README           # документация Alembic
+│   └── versions/        # файлы миграций
 ├── utils/
 │   ├── rag_client.py     # логика запросов к RAG API
 │   ├── helpers.py        # парсинг аргументов, валидация
 │   └── logger.py         # настройка логирования
 ├── logs/                 # директория для логов
 ├── requirements.txt
+├── alembic.ini          # конфигурация Alembic
 ├── Dockerfile
 ├── docker-compose.yml
+├── entrypoint.sh        # точка входа контейнера (миграции + запуск)
 ├── nginx.conf
 ├── env.example
-├── start.sh             # скрипт запуска
+├── start.sh             # скрипт запуска для локальной разработки
 ├── test_setup.py        # тестовый скрипт
+├── ANALYTICS_UPDATE.md  # документация по аналитике
+├── MIGRATION_GUIDE.md   # руководство по миграциям
+├── .dockerignore        # исключения для Docker
+├── .gitignore           # исключения для Git
 └── README.md
 ```
 
 ---
 
 ## 🗄️ База данных
+
+Проект использует PostgreSQL и **Alembic** для управления миграциями.
+
+### Миграции базы данных
+
+#### Автоматические миграции (Docker)
+При запуске через Docker Compose миграции **применяются автоматически**:
+1. `entrypoint.sh` ожидает готовности PostgreSQL (до 30 попыток)
+2. Выполняет `alembic upgrade head`
+3. При успехе запускает бота
+4. При ошибке контейнер останавливается
+
+Логи миграций можно увидеть при запуске:
+```bash
+docker compose up
+# или
+docker compose logs bot
+```
+
+#### Ручное управление миграциями
+```bash
+# Примените все миграции
+alembic upgrade head
+
+# Откатите последнюю миграцию
+alembic downgrade -1
+
+# Посмотрите текущий статус
+alembic current
+
+# Посмотрите историю миграций
+alembic history
+
+# Создайте новую миграцию
+alembic revision -m "описание миграции"
+```
+
+### Структура таблиц
 
 ```sql
 -- Основная таблица пользователей
@@ -142,6 +196,7 @@ CREATE TABLE IF NOT EXISTS rag_requests (
   user_id     BIGINT NOT NULL,
   request_id  TEXT,
   text        TEXT,
+  status      TEXT DEFAULT 'pending', -- 'pending', 'success', 'failed'
   created_at  TIMESTAMP DEFAULT NOW(),
   FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
@@ -153,6 +208,52 @@ CREATE TABLE IF NOT EXISTS messages (
   message_type TEXT NOT NULL, -- 'command', 'text', 'rag_response'
   content     TEXT,
   created_at  TIMESTAMP DEFAULT NOW(),
+  FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- Таблица для хранения шаблонов текстов
+CREATE TABLE IF NOT EXISTS text_templates (
+  id          SERIAL PRIMARY KEY,
+  key         TEXT UNIQUE NOT NULL,
+  value       TEXT NOT NULL,
+  description TEXT,
+  created_at  TIMESTAMP DEFAULT NOW(),
+  updated_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Таблица для логирования действий пользователей
+CREATE TABLE IF NOT EXISTS user_actions_log (
+  id          SERIAL PRIMARY KEY,
+  user_id     BIGINT NOT NULL,
+  action      TEXT NOT NULL,
+  object      TEXT,
+  created_at  TIMESTAMP DEFAULT NOW(),
+  FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- Таблица для хранения информации о привлечении пользователей
+CREATE TABLE IF NOT EXISTS user_acquisition (
+  id             SERIAL PRIMARY KEY,
+  user_id        BIGINT UNIQUE NOT NULL,
+  payload_raw    TEXT,
+  payload_decoded TEXT,
+  src            TEXT,
+  campaign       TEXT,
+  ad             TEXT,
+  language_code  TEXT,
+  first_seen_at  TIMESTAMP DEFAULT NOW(),
+  FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+
+-- Таблица для хранения лимитов пользователей
+CREATE TABLE IF NOT EXISTS user_limits (
+  id                  SERIAL PRIMARY KEY,
+  user_id             BIGINT UNIQUE NOT NULL,
+  absolute_limit      INTEGER DEFAULT NULL,
+  absolute_used       INTEGER DEFAULT 0,
+  weekly_limit        INTEGER DEFAULT NULL,
+  weekly_used         INTEGER DEFAULT 0,
+  week_start          TIMESTAMP DEFAULT NOW(),
   FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 ```

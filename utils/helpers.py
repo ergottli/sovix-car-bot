@@ -1,5 +1,8 @@
 import re
+import base64
+import urllib.parse
 from typing import Optional, Tuple, List
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 def parse_command_args(text: str) -> Tuple[str, List[str]]:
     """
@@ -125,3 +128,66 @@ def sanitize_text(text: str) -> str:
     """
     # Удаляем потенциально опасные символы, но оставляем обычные
     return re.sub(r'[<>"\']', '', text.strip())
+
+def generate_deep_link(params: str, bot_username: str) -> str:
+    """
+    Генерация deep-link для Telegram бота
+    
+    Args:
+        params: Параметры в формате "cmp=name&src=source&ad=banner"
+        bot_username: Имя бота (без @)
+        
+    Returns:
+        Полная ссылка вида https://t.me/BotUsername?start=payload
+        
+    Примеры:
+        generate_deep_link("cmp=winter_2025&src=tg&ad=banner1", "car_sovix_bot")
+        # Возвращает: https://t.me/car_sovix_bot?start=Y21wPXdpbnRlcl8yMDI1JnNyYz10ZyZhZD1iYW5uZXIx
+    """
+    # Кодируем в base64url (без = в конце и с безопасными символами для URL)
+    payload = base64.urlsafe_b64encode(params.encode('utf-8')).decode('utf-8')
+    
+    # Убираем знаки = в конце, если есть (для URL-safe)
+    payload = payload.rstrip('=')
+    
+    # Формируем финальную ссылку
+    deep_link = f"https://t.me/{bot_username}?start={payload}"
+    
+    return deep_link
+
+def parse_deep_link_params(params_str: str) -> dict:
+    """
+    Парсинг параметров deep-link
+    
+    Args:
+        params_str: Строка параметров "cmp=name&src=source&ad=banner"
+        
+    Returns:
+        Словарь с параметрами
+    """
+    params_dict = {}
+    for pair in params_str.split('&'):
+        if '=' in pair:
+            key, value = pair.split('=', 1)
+            params_dict[key.strip()] = value.strip()
+    return params_dict
+
+def validate_deep_link_params(params_str: str) -> bool:
+    """
+    Валидация параметров deep-link
+    
+    Args:
+        params_str: Строка параметров
+        
+    Returns:
+        True если валидно
+    """
+    # Проверяем базовую структуру
+    if not params_str or '=' not in params_str:
+        return False
+    
+    # Проверяем наличие обязательных ключей
+    required_keys = ['cmp', 'src', 'ad']
+    keys = [p.split('=')[0] for p in params_str.split('&') if '=' in p]
+    
+    return all(key in keys for key in required_keys)

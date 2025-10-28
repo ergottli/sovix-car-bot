@@ -12,9 +12,14 @@ class RAGClient:
         self.api_key = os.getenv('RAG_API_KEY')
         self.poll_interval = int(os.getenv('RAG_POLL_INTERVAL_SEC', 3))
         self.max_attempts = int(os.getenv('RAG_MAX_ATTEMPTS', 100))
+        self.test_mode = os.getenv('RAG_TEST', '').lower() in ['true', '1', 'yes', 'on']
         
-        if not self.api_url or not self.api_key:
-            raise ValueError("RAG_API_URL and RAG_API_KEY environment variables are required")
+        if self.test_mode:
+            logger.info("RAG is running in TEST MODE - will return test responses")
+            self.test_response = "тестовый ответ [к реальному API не обращался]"
+        else:
+            if not self.api_url or not self.api_key:
+                raise ValueError("RAG_API_URL and RAG_API_KEY environment variables are required")
     
     async def send_request(self, text: str, user_id: int, username: str = None) -> Optional[str]:
         """
@@ -31,6 +36,13 @@ class RAGClient:
         logger.info(f"Sending RAG request for user {user_id} (@{username}): {text[:100]}...")
         
         try:
+            # Если режим тестирования, возвращаем тестовый ответ
+            if self.test_mode:
+                logger.info(f"Test mode active, returning test response for user {user_id}")
+                from database.db import db
+                await db.log_rag_request(user_id, "TEST_MODE", text[:200] + "..." if len(text) > 200 else text, 'success')
+                return self.test_response
+            
             # Отправка запроса
             request_id = await self._create_request(text, user_id, username)
             if not request_id:
@@ -41,7 +53,7 @@ class RAGClient:
             
             # Логируем RAG запрос в базу данных
             from database.db import db
-            await db.log_rag_request(user_id, request_id, text[:200] + "..." if len(text) > 200 else text)
+            await db.log_rag_request(user_id, request_id, text[:200] + "..." if len(text) > 200 else text, 'pending')
             
             # Ожидание ответа
             logger.debug(f"Waiting for RAG response for request {request_id}")
@@ -49,8 +61,10 @@ class RAGClient:
             
             if response:
                 logger.info(f"RAG response received for user {user_id}, length: {len(response)} chars")
+                await db.update_rag_request_status(request_id, 'success')
             else:
                 logger.warning(f"No RAG response received for user {user_id}, request {request_id}")
+                await db.update_rag_request_status(request_id, 'failed')
             
             return response
             
