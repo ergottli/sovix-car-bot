@@ -324,6 +324,44 @@ async def process_car_description(message: Message, state: FSMContext):
         await message.reply("❌ Произошла ошибка при сохранении информации об автомобиле.")
         await state.clear()
 
+@router.message(F.photo | F.video | F.audio | F.voice | F.document | F.sticker | F.video_note)
+async def handle_media_message(message: Message):
+    """Обработка медиа сообщений (фото, видео, аудио и т.д.)"""
+    user_id = message.from_user.id
+    
+    # Проверяем, не заблокирован ли пользователь
+    user = await db.get_user(user_id)
+    if user and not user.get('allowed'):
+        await message.reply("❌ Ваш доступ к функциям бота заблокирован администратором.")
+        return
+    
+    # Логируем действие
+    media_type = "unknown"
+    if message.photo:
+        media_type = "photo"
+    elif message.video:
+        media_type = "video"
+    elif message.audio:
+        media_type = "audio"
+    elif message.voice:
+        media_type = "voice"
+    elif message.document:
+        media_type = "document"
+    elif message.sticker:
+        media_type = "sticker"
+    elif message.video_note:
+        media_type = "video_note"
+    
+    await db.log_action(user_id, "media_message", media_type)
+    await db.log_message(user_id, "media", media_type)
+    
+    # Получаем текст из шаблона
+    media_text = await db.get_template('media_not_supported_text')
+    if not media_text:
+        media_text = "Напишите свой вопрос. Картинки и аудио я пока не понимаю, но уже учусь)"
+    
+    await message.reply(media_text)
+
 @router.message(F.text)
 async def handle_text_message(message: Message):
     """Обработка текстовых сообщений (вопросы к боту)"""
